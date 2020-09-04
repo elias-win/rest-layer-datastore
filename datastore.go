@@ -2,11 +2,12 @@ package datastore
 
 import (
 	"context"
+	"reflect"
 	"time"
 
-  "github.com/rs/rest-layer/schema/query"
 	"cloud.google.com/go/datastore"
 	"github.com/rs/rest-layer/resource"
+	"github.com/rs/rest-layer/schema/query"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 )
@@ -108,12 +109,45 @@ func newItem(e *Entity) *resource.Item {
 	}
 }
 
+// mapToDatastoreEntity converts a map[string]interface{} to da datastore Entity
+func mapToDatastoreEntity(m map[string]interface{}) *datastore.Entity {
+	var properties []datastore.Property
+	for key, value := range m {
+		properties = append(properties, datastore.Property{
+			Name:  key,
+			Value: value,
+		})
+	}
+	return &datastore.Entity{
+		Key: &datastore.Key{
+			Kind: "name",
+		},
+		Properties: properties,
+	}
+}
+
 // newEntity converts a resource.Item into a Google datastore entity
 func (d *Handler) newEntity(i *resource.Item) *Entity {
 	p := make(map[string]interface{}, len(i.Payload))
-	for k, v := range i.Payload {
-		if k != "id" {
-			p[k] = v
+	for key, value := range i.Payload {
+		if key != "id" {
+			reflectValue := reflect.ValueOf(value)
+			switch reflectValue.Kind() {
+			case reflect.Slice:
+				sliceValue := value.([]interface{})
+				for index := 0; index < reflectValue.Len(); index++ {
+					innerValue := sliceValue[index]
+					switch innerValue.(type) {
+					case map[string]interface{}:
+						sliceValue[index] = mapToDatastoreEntity(innerValue.(map[string]interface{}))
+					}
+				}
+				p[key] = sliceValue
+			case reflect.Map:
+				p[key] = mapToDatastoreEntity(value.(map[string]interface{}))
+			default:
+				p[key] = value
+			}
 		}
 	}
 	return &Entity{
@@ -248,7 +282,8 @@ func (d *Handler) Find(ctx context.Context, q *query.Query) (*resource.ItemList,
 	if err != nil {
 		return nil, err
 	}
-	offset := 0; limit := -1
+	offset := 0
+	limit := -1
 
 	if q.Window != nil && q.Window.Offset > 0 {
 		offset = q.Window.Offset
@@ -260,10 +295,10 @@ func (d *Handler) Find(ctx context.Context, q *query.Query) (*resource.ItemList,
 
 	// TODO: Apply context deadline if any.
 	list := &resource.ItemList{
-		Total: -1,
+		Total:  -1,
 		Offset: offset,
-		Limit: limit,
-		Items: []*resource.Item{},
+		Limit:  limit,
+		Items:  []*resource.Item{},
 	}
 	if q.Window != nil {
 		qry = applyWindow(qry, *q.Window)
