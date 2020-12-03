@@ -171,16 +171,16 @@ func (d *Handler) SetNoIndexProperties(props []string) *Handler {
 
 // Insert inserts new entities
 func (d *Handler) Insert(ctx context.Context, items []*resource.Item) error {
-	mKeys := make([]*datastore.Key, len(items))
-	mEntities := make([]interface{}, len(items))
-
-	for i, item := range items {
-		mKeys[i] = datastore.NameKey(d.entity, item.ID.(string), nil)
-		mKeys[i].Namespace = d.namespace
-		mEntities[i] = d.newEntity(item)
+	for _, item := range items {
+		key := datastore.NameKey(d.entity, item.ID.(string), nil)
+		key.Namespace = d.namespace
+		entity := d.newEntity(item)
+		_, err := d.client.Mutate(ctx, datastore.NewInsert(key, entity))
+		if err != nil {
+			return err
+		}
 	}
-	_, err := d.client.PutMulti(ctx, mKeys, mEntities)
-	return err
+	return nil
 }
 
 // Update replace an entity by a new one in the Datastore
