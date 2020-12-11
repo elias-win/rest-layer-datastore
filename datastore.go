@@ -109,13 +109,33 @@ func newItem(e *Entity) *resource.Item {
 	}
 }
 
+func transformValue(value interface{}) interface{} {
+	reflectValue := reflect.ValueOf(value)
+	switch reflectValue.Kind() {
+	case reflect.Slice:
+		sliceValue := value.([]interface{})
+		for index := 0; index < reflectValue.Len(); index++ {
+			innerValue := sliceValue[index]
+			switch innerValue.(type) {
+			case map[string]interface{}:
+				sliceValue[index] = mapToDatastoreEntity(innerValue.(map[string]interface{}))
+			}
+		}
+		return sliceValue
+	case reflect.Map:
+		return mapToDatastoreEntity(value.(map[string]interface{}))
+	default:
+		return value
+	}
+}
+
 // mapToDatastoreEntity converts a map[string]interface{} to da datastore Entity
 func mapToDatastoreEntity(m map[string]interface{}) *datastore.Entity {
 	var properties []datastore.Property
 	for key, value := range m {
 		properties = append(properties, datastore.Property{
 			Name:  key,
-			Value: value,
+			Value: transformValue(value),
 		})
 	}
 	return &datastore.Entity{
@@ -131,23 +151,7 @@ func (d *Handler) newEntity(i *resource.Item) *Entity {
 	p := make(map[string]interface{}, len(i.Payload))
 	for key, value := range i.Payload {
 		if key != "id" {
-			reflectValue := reflect.ValueOf(value)
-			switch reflectValue.Kind() {
-			case reflect.Slice:
-				sliceValue := value.([]interface{})
-				for index := 0; index < reflectValue.Len(); index++ {
-					innerValue := sliceValue[index]
-					switch innerValue.(type) {
-					case map[string]interface{}:
-						sliceValue[index] = mapToDatastoreEntity(innerValue.(map[string]interface{}))
-					}
-				}
-				p[key] = sliceValue
-			case reflect.Map:
-				p[key] = mapToDatastoreEntity(value.(map[string]interface{}))
-			default:
-				p[key] = value
-			}
+			p[key] = transformValue(value)
 		}
 	}
 	return &Entity{
