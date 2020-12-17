@@ -109,6 +109,7 @@ func newItem(e *Entity) *resource.Item {
 	}
 }
 
+// transformValue transforms slices and maps to entities that can be stored in Datastore.
 func transformValue(value interface{}) interface{} {
 	reflectValue := reflect.ValueOf(value)
 	switch reflectValue.Kind() {
@@ -163,7 +164,7 @@ func (d *Handler) newEntity(i *resource.Item) *Entity {
 	}
 }
 
-// SetNoIndexProps sets the handlers properties which should have noindex set.
+// SetNoIndexProperties sets the handlers properties which should have noindex set.
 func (d *Handler) SetNoIndexProperties(props []string) *Handler {
 	p := make(map[string]bool, len(props))
 	for _, v := range props {
@@ -173,11 +174,19 @@ func (d *Handler) SetNoIndexProperties(props []string) *Handler {
 	return d
 }
 
+func (d *Handler) getNamespace(ctx context.Context) string {
+	namespace := ctx.Value("namespace")
+	if namespace != nil {
+		return namespace.(string)
+	}
+	return d.namespace
+}
+
 // Insert inserts new entities
 func (d *Handler) Insert(ctx context.Context, items []*resource.Item) error {
 	for _, item := range items {
 		key := datastore.NameKey(d.entity, item.ID.(string), nil)
-		key.Namespace = d.namespace
+		key.Namespace = d.getNamespace(ctx)
 		entity := d.newEntity(item)
 		_, err := d.client.Mutate(ctx, datastore.NewInsert(key, entity))
 		if err != nil {
@@ -196,7 +205,7 @@ func (d *Handler) Update(ctx context.Context, item *resource.Item, original *res
 	tx := func(tx *datastore.Transaction) error {
 		// Create a key for our current Entity
 		key := datastore.NameKey(d.entity, original.ID.(string), nil)
-		key.Namespace = d.namespace
+		key.Namespace = d.getNamespace(ctx)
 
 		var current Entity
 		// Attempt to get the existing Entity
@@ -224,7 +233,7 @@ func (d *Handler) Delete(ctx context.Context, item *resource.Item) error {
 	tx := func(tx *datastore.Transaction) error {
 		// Create a key for our target Entity
 		key := datastore.NameKey(d.entity, item.ID.(string), nil)
-		key.Namespace = d.namespace
+		key.Namespace = d.getNamespace(ctx)
 
 		var e Entity
 		// Attempt to get the existing Entity
@@ -247,7 +256,7 @@ func (d *Handler) Delete(ctx context.Context, item *resource.Item) error {
 
 // Clear clears all entities matching the lookup from the Datastore
 func (d *Handler) Clear(ctx context.Context, q *query.Query) (int, error) {
-	qry, err := getQuery(d.entity, d.namespace, q)
+	qry, err := getQuery(d.entity, d.getNamespace(ctx), q)
 	if err != nil {
 		return 0, err
 	}
@@ -282,7 +291,7 @@ func (d *Handler) Clear(ctx context.Context, q *query.Query) (int, error) {
 
 // Find entities matching the provided lookup from the Datastore
 func (d *Handler) Find(ctx context.Context, q *query.Query) (*resource.ItemList, error) {
-	qry, err := getQuery(d.entity, d.namespace, q)
+	qry, err := getQuery(d.entity, d.getNamespace(ctx), q)
 	if err != nil {
 		return nil, err
 	}
