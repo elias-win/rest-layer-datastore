@@ -3,6 +3,7 @@ package datastore
 import (
 	"context"
 	"reflect"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/datastore"
@@ -139,6 +140,11 @@ func (d *Handler) mapToDatastoreEntity(m map[string]interface{}, parentKey strin
 		for noIndexKey := range d.noIndexProps {
 			if noIndexKey == keyPath {
 				noIndex = true
+			} else if strings.HasSuffix(noIndexKey, ".*") {
+				noIndexKey = strings.TrimSuffix(noIndexKey, "*")
+				if strings.HasPrefix(keyPath, noIndexKey) {
+					noIndex = true
+				}
 			}
 		}
 		properties = append(properties, datastore.Property{
